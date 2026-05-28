@@ -1,0 +1,52 @@
+name: Attest existing release assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing public release tag to attest, e.g. v0.1.105-canary.1.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: attest-existing-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  attest:
+    name: attest release assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          gh release download "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --dir release-assets \
+            --pattern 'agenc-marketplace-*'
+
+      - name: Verify release checksums
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          for checksum in *.sha256; do
+            test -f "${checksum}"
+            shasum -a 256 -c "${checksum}"
+          done
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            release-assets/agenc-marketplace-*

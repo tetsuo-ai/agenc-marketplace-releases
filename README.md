@@ -17,6 +17,11 @@ Public GitHub Releases in this repository are the public artifact mirror for
 binary downloads, checksums, and GitHub artifact attestations once the release
 workflow has produced them.
 
+Canary assets may also be operator-uploaded from a private builder lane and
+attested in this public repo with `attest-existing-release.yml`. Those
+attestations bind the public release asset digest to this repository while the
+source remains private.
+
 ## Verification
 
 For each release asset:
