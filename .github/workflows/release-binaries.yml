@@ -1,0 +1,195 @@
+name: Release binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-ref:
+        description: Private source ref to build.
+        required: true
+        default: main
+        type: string
+      tag:
+        description: Public release tag, e.g. v0.1.105.
+        required: true
+        type: string
+      channel:
+        description: Release channel.
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - next
+      draft:
+        description: Create/update the GitHub Release as draft.
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-binaries-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build / ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x64
+            runner: ubuntu-latest
+            artifact: agenc-marketplace-linux-x64
+          - label: windows-x64
+            runner: windows-latest
+            artifact: agenc-marketplace-windows-x64.exe
+          - label: macos-arm64
+            runner: macos-14
+            artifact: agenc-marketplace-macos-arm64
+
+    steps:
+      - name: Checkout private source
+        uses: actions/checkout@v4
+        with:
+          repository: tetsuo-ai/agenc-marketplace-agent-kit
+          ref: ${{ inputs.source-ref }}
+          token: ${{ secrets.AGENC_SOURCE_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+
+      - name: Setup Node 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Install without lifecycle scripts
+        working-directory: source
+        run: npm ci --ignore-scripts
+
+      - name: Build workspace
+        working-directory: source
+        run: npm run build
+
+      - name: Build SEA binary
+        working-directory: source
+        run: npm run build:sea
+
+      - name: Smoke test binary
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          "./release-artifacts/${{ matrix.artifact }}" --version
+          "./release-artifacts/${{ matrix.artifact }}" --help
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public-artifacts
+          cp "source/release-artifacts/${{ matrix.artifact }}" "public-artifacts/${{ matrix.artifact }}"
+          if [[ "${{ runner.os }}" != "Windows" ]]; then
+            chmod 0755 "public-artifacts/${{ matrix.artifact }}"
+          fi
+          shasum -a 256 "public-artifacts/${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
+
+      - name: Attest binary provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: public-artifacts/${{ matrix.artifact }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            public-artifacts/${{ matrix.artifact }}
+            public-artifacts/${{ matrix.artifact }}.sha256
+          retention-days: 14
+
+  release-manifest:
+    name: release manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+
+    steps:
+      - name: Checkout private source
+        uses: actions/checkout@v4
+        with:
+          repository: tetsuo-ai/agenc-marketplace-agent-kit
+          ref: ${{ inputs.source-ref }}
+          token: ${{ secrets.AGENC_SOURCE_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/all
+
+      - name: Generate release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node source/scripts/generate-binary-release-manifest.mjs \
+            --artifact-root release-artifacts/all \
+            --tag "${{ inputs.tag }}" \
+            --channel "${{ inputs.channel }}" \
+            --repository tetsuo-ai/agenc-marketplace-releases \
+            --workflow .github/workflows/release-binaries.yml \
+            --base-url "https://github.com/tetsuo-ai/agenc-marketplace-releases/releases/download/${{ inputs.tag }}" \
+            --out release-artifacts/agenc-marketplace-release-manifest.json
+          shasum -a 256 release-artifacts/agenc-marketplace-release-manifest.json > release-artifacts/agenc-marketplace-release-manifest.json.sha256
+
+      - name: Attest manifest provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: release-artifacts/agenc-marketplace-release-manifest.json
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          DRAFT: ${{ inputs.draft }}
+          SOURCE_REF: ${{ inputs.source-ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="Public AgenC Marketplace binary release.
+
+Source repository: tetsuo-ai/agenc-marketplace-agent-kit
+Source ref: ${SOURCE_REF}
+
+Verify each artifact with:
+  gh attestation verify <artifact> --repo tetsuo-ai/agenc-marketplace-releases
+  shasum -a 256 -c <artifact>.sha256"
+
+          draft_flag=()
+          if [[ "${DRAFT}" == "true" ]]; then
+            draft_flag=(--draft)
+          fi
+
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes "${notes}"
+          else
+            gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" --title "${TAG}" --notes "${notes}" "${draft_flag[@]}"
+          fi
+
+          mapfile -t assets < <(find release-artifacts/all -type f -name 'agenc-marketplace-*' | sort)
+          gh release upload "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            "${assets[@]}" \
+            release-artifacts/agenc-marketplace-release-manifest.json \
+            release-artifacts/agenc-marketplace-release-manifest.json.sha256 \
+            --clobber
