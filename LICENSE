@@ -1,0 +1,91 @@
+AgenC Proprietary Software License
+
+Copyright (c) 2026 Tetsuo AI. All rights reserved.
+
+This software and the accompanying documentation are proprietary to Tetsuo AI
+and are licensed, not sold. Access to this repository, package, binary,
+installer, hosted manifest, or related service does not grant any public,
+open-source, or redistribution rights.
+
+1. Authorized Use
+
+You may install, run, and copy this software only as expressly authorized by
+Tetsuo AI in writing, through a signed agreement, a managed marketplace
+entitlement, or another explicit Tetsuo AI distribution approval. Authorized
+use is limited to the organization, account, release channel, version, and
+environment covered by that approval.
+
+2. Restrictions
+
+Except where a restriction is prohibited by applicable law, you may not:
+
+- copy, publish, redistribute, sublicense, rent, lease, sell, resell, host, or
+  otherwise make the software available to any unauthorized party;
+- modify, adapt, translate, fork, or create derivative works except as
+  expressly authorized by Tetsuo AI in writing;
+- reverse engineer, decompile, disassemble, extract, unwrap, or otherwise
+  attempt to derive source code, build artifacts, signing material, private
+  interfaces, or protected implementation details;
+- remove, alter, or obscure copyright, license, provenance, entitlement,
+  checksum, attestation, or security notices;
+- bypass, disable, tamper with, or misrepresent release metadata, hosted
+  entitlement checks, artifact verification, rate limits, provenance checks, or
+  other distribution controls;
+- use the software to build, distribute, or operate a competing hosted
+  marketplace, registry, moderation, entitlement, release, or task-discovery
+  service without written permission from Tetsuo AI.
+
+3. Ownership
+
+Tetsuo AI and its licensors retain all right, title, and interest in and to the
+software, documentation, trademarks, service names, hosted APIs, release
+metadata, and related intellectual property. No rights are granted by
+implication, exhaustion, or estoppel.
+
+4. Third-Party Components
+
+This software may include or depend on third-party components. Those components
+remain subject to their own license terms. Third-party notices do not grant
+rights to Tetsuo AI proprietary code or hosted services.
+
+5. Hosted Services And Entitlement
+
+Hosted AgenC services may enforce entitlement, rate limits, abuse controls,
+release-channel policy, and operational safeguards. The local wallet, vault,
+Ledger signer, signer-policy evaluation, transaction preview, and final signing
+authority must remain local and are not licensed for remote custody or control
+by hosted services.
+
+6. Confidentiality
+
+Non-public source code, package artifacts, binaries, manifests, build scripts,
+security controls, and implementation details are confidential unless Tetsuo AI
+explicitly designates them as public.
+
+7. Termination
+
+Any unauthorized copying, redistribution, publication, reverse engineering,
+entitlement bypass, or material breach terminates your license automatically.
+Upon termination you must stop using the software and delete all unauthorized
+copies.
+
+8. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY
+KIND, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NON-INFRINGEMENT.
+
+9. Limitation Of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, TETSUO AI AND ITS LICENSORS WILL NOT BE
+LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE
+DAMAGES, OR FOR LOST PROFITS, LOST REVENUE, LOST DATA, LOSS OF GOODWILL,
+BUSINESS INTERRUPTION, MARKETPLACE LOSSES, ON-CHAIN LOSSES, OR WALLET LOSSES,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+10. Prior Releases
+
+This license applies to releases and copies distributed under this license. It
+does not retroactively revoke rights, if any, that were validly granted for
+earlier copies under earlier license terms.
