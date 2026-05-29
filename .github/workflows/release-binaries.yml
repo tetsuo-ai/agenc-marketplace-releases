@@ -55,8 +55,8 @@ jobs:
           test -f README.md
           test -f LICENSE
           test -f EULA.md
-          grep -q 'tetsuo-ai/agenc-marketplace-releases' README.md
-          grep -q 'official `tetsuo-ai` GitHub Actions release lane' README.md
+          grep -q "tetsuo-ai/agenc-marketplace-releases" README.md
+          grep -q "official \`tetsuo-ai\` GitHub Actions release lane" README.md
 
   build:
     name: build / ${{ matrix.label }}
@@ -191,14 +191,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          notes="Public AgenC Marketplace binary release.
+          notes="$(cat <<EOF
+          Public AgenC Marketplace binary release.
 
-Source repository: tetsuo-ai/agenc-marketplace-agent-kit
-Source ref: ${SOURCE_REF}
+          Source repository: tetsuo-ai/agenc-marketplace-agent-kit
+          Source ref: ${SOURCE_REF}
 
-Verify each artifact with:
-  gh attestation verify <artifact> --repo tetsuo-ai/agenc-marketplace-releases
-  shasum -a 256 -c <artifact>.sha256"
+          Verify each artifact with:
+            gh attestation verify <artifact> --repo tetsuo-ai/agenc-marketplace-releases
+            shasum -a 256 -c <artifact>.sha256
+          EOF
+          )"
 
           draft_flag=()
           if [[ "${DRAFT}" == "true" ]]; then
