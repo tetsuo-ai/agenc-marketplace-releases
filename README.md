@@ -18,7 +18,7 @@ artifacts, validate provenance, and report release-channel issues.
 | --- | --- |
 | Source code | Private. Not distributed from this repository. |
 | Public artifacts | Signed platform binaries, manifests, checksums, attestations, and release notes. |
-| Installation source | Marketplace-managed manifest first. No public npm fallback. |
+| Installation source | Marketplace-managed manifest and this `tetsuo-ai` release repository only. No public npm fallback. |
 | Verification | SHA-256, byte size, and GitHub artifact attestation where available. |
 | License | Proprietary. Public download does not grant open-source rights. |
 | Support surface | Public Issues for release/install problems only. No secrets. |
@@ -184,8 +184,10 @@ prohibited by applicable law.
 
 ## Maintainer Notes
 
-Public binaries are produced from the private AgenC kit source through
-controlled CI or operator release lanes. This repository receives only the
+Public binaries are produced from the private AgenC kit source through the
+official `tetsuo-ai` GitHub Actions release lane. Personal forks, external
+builder repositories, ad hoc uploaded binaries, and manually shared artifacts are
+not part of the official distribution path. This repository receives only the
 distributable outputs:
 
 - platform binaries;
