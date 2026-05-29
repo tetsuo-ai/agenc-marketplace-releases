@@ -1,6 +1,9 @@
 name: Release binaries
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       source-ref:
@@ -32,12 +35,33 @@ permissions:
   attestations: write
 
 concurrency:
-  group: release-binaries-${{ inputs.tag }}
+  group: release-binaries-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.sha }}
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: validate release repository metadata
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify public release docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f LICENSE
+          test -f EULA.md
+          grep -q 'tetsuo-ai/agenc-marketplace-releases' README.md
+          grep -q 'official `tetsuo-ai` GitHub Actions release lane' README.md
+
   build:
     name: build / ${{ matrix.label }}
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -119,6 +143,7 @@ jobs:
 
   release-manifest:
     name: release manifest
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: build
