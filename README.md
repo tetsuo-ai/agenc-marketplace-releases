@@ -23,6 +23,30 @@ artifacts, validate provenance, and report release-channel issues.
 | License | Proprietary. Public download does not grant open-source rights. |
 | Support surface | Public Issues for release/install problems only. No secrets. |
 
+## Binary Hardening
+
+The public binary is built from the private AgenC kit source through the
+official `tetsuo-ai` GitHub Actions release lane. The implementation source,
+workspace packages, and restricted package artifacts are not published here.
+
+Current release hardening:
+
+- source code is not distributed through this public repository;
+- the standalone CLI is shipped as a Node SEA binary;
+- production artifacts do not include sourcemaps;
+- the embedded CLI is compiled in memory and is not written as a temporary
+  JavaScript source file before startup;
+- the embedded bundle is obfuscated by default to reduce casual static carving;
+- checksums are produced after final signing/notarization steps;
+- release metadata pins artifact names, byte sizes, SHA-256 digests, GitHub
+  Release URLs, and attestation metadata.
+
+This is copy-resistance and release hygiene, not cryptographic DRM. A determined
+reverse engineer with a local binary can still inspect runtime behavior and
+public protocol interactions. The enforceable product boundary is private
+source control, signed provenance, the proprietary license/EULA, and the
+official binary distribution lane.
+
 ## Quick Start
 
 Fetch the marketplace-managed manifest:
