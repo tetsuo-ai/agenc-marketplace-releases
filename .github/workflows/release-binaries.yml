@@ -166,6 +166,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts/all
+          merge-multiple: true
 
       - name: Generate release manifest
         shell: bash
