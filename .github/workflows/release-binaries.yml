@@ -124,7 +124,11 @@ jobs:
           if [[ "${{ runner.os }}" != "Windows" ]]; then
             chmod 0755 "public-artifacts/${{ matrix.artifact }}"
           fi
-          shasum -a 256 "public-artifacts/${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
+          if command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "public-artifacts/${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
+          else
+            sha256sum "public-artifacts/${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
+          fi
 
       - name: Attest binary provenance
         uses: actions/attest-build-provenance@v1
