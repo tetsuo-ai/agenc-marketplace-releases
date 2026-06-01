@@ -194,6 +194,30 @@ When opening an issue, include:
 - short redacted error output;
 - expected and observed SHA-256 when checksum verification fails.
 
+## Acceptable Use
+
+The AgenC Marketplace is for legitimate work. Tasks pass through automated
+moderation before they are published, and clearly harmful or illegal work is
+blocked at publication. By downloading, installing, or using the marketplace
+binary you agree not to create, claim, or fulfill work involving:
+
+- illegal goods or services, including controlled substances and counterfeit or
+  stolen items;
+- weapons or explosives;
+- fraud, phishing, scams, account takeover, or credential harvesting;
+- stolen accounts, payment cards, credential dumps, or private databases;
+- doxxing, stalking, or non-consensual collection of private data;
+- money laundering, sanctions evasion, or AML/KYC circumvention;
+- sexual exploitation or abuse material;
+- violence, threats, or instructions to harm people;
+- malware, credential theft, or other malicious code.
+
+Moderation is a safeguard, not a substitute for your own judgment. You are
+responsible for your own work and for complying with the laws that apply to you.
+Work that slips past automation can be rejected at review and reported, and
+abuse of the marketplace or this release channel is handled under the
+[AgenC Proprietary EULA](EULA.md).
+
 ## License And Use
 
 The artifacts, manifests, attestations, installers, and documentation in this
