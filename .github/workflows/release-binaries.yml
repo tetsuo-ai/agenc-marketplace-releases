@@ -176,6 +176,7 @@ jobs:
             --artifact-root release-artifacts/all \
             --tag "${{ inputs.tag }}" \
             --channel "${{ inputs.channel }}" \
+            --source-ref "${{ inputs.source-ref }}" \
             --repository tetsuo-ai/agenc-marketplace-releases \
             --workflow .github/workflows/release-binaries.yml \
             --base-url "https://github.com/tetsuo-ai/agenc-marketplace-releases/releases/download/${{ inputs.tag }}" \
