@@ -63,26 +63,51 @@ jobs:
           grep -q "tetsuo-ai/agenc-marketplace-releases" README.md
           grep -q "official \`tetsuo-ai\` GitHub Actions release lane" README.md
 
+  # The matrix context is not available in job-level `if`, so the platform
+  # filter lives in this tiny plan job: it turns the `platforms` input into
+  # the matrix include list. Legs whose runners do not exist (e.g.
+  # windows-x64 while hosted runners are billing-blocked) are simply never
+  # scheduled, so `needs: build` stays green for the manifest job.
+  plan:
+    name: plan build matrix
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    outputs:
+      include: ${{ steps.plan.outputs.include }}
+    steps:
+      - id: plan
+        shell: bash
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          include="$(python3 - <<'PYEOF'
+          import json, os
+          legs = [
+              {"label": "linux-x64", "runner": ["self-hosted", "Linux", "X64"],
+               "artifact": "agenc-marketplace-linux-x64"},
+              {"label": "windows-x64", "runner": "windows-latest",
+               "artifact": "agenc-marketplace-windows-x64.exe"},
+              {"label": "macos-arm64", "runner": ["self-hosted", "macOS", "ARM64"],
+               "artifact": "agenc-marketplace-macos-arm64"},
+          ]
+          wanted = {p.strip() for p in os.environ["PLATFORMS"].split(",") if p.strip()}
+          print(json.dumps([leg for leg in legs if leg["label"] in wanted]))
+          PYEOF
+          )"
+          echo "include=${include}" >> "$GITHUB_OUTPUT"
+          echo "planned matrix: ${include}"
+
   build:
     name: build / ${{ matrix.label }}
-    if: github.event_name == 'workflow_dispatch' && contains(inputs.platforms, matrix.label)
+    needs: plan
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - label: linux-x64
-            # Self-hosted (droplet): org billing for hosted runners is off.
-            runner: [self-hosted, Linux, X64]
-            artifact: agenc-marketplace-linux-x64
-          - label: windows-x64
-            runner: windows-latest
-            artifact: agenc-marketplace-windows-x64.exe
-          - label: macos-arm64
-            # Self-hosted (maintainer Mac): org billing for hosted runners is off.
-            runner: [self-hosted, macOS, ARM64]
-            artifact: agenc-marketplace-macos-arm64
+        include: ${{ fromJSON(needs.plan.outputs.include) }}
 
     steps:
       - name: Checkout private source
