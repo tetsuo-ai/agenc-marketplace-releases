@@ -28,6 +28,11 @@ on:
         required: true
         default: true
         type: boolean
+      platforms:
+        description: Comma-separated matrix labels to build. Add windows-x64 only when a Windows runner exists.
+        required: true
+        default: linux-x64,macos-arm64
+        type: string
 
 permissions:
   contents: write
@@ -41,7 +46,7 @@ concurrency:
 jobs:
   validate:
     name: validate release repository metadata
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 5
     permissions:
       contents: read
@@ -60,7 +65,7 @@ jobs:
 
   build:
     name: build / ${{ matrix.label }}
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && contains(inputs.platforms, matrix.label)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -68,13 +73,15 @@ jobs:
       matrix:
         include:
           - label: linux-x64
-            runner: ubuntu-latest
+            # Self-hosted (droplet): org billing for hosted runners is off.
+            runner: [self-hosted, Linux, X64]
             artifact: agenc-marketplace-linux-x64
           - label: windows-x64
             runner: windows-latest
             artifact: agenc-marketplace-windows-x64.exe
           - label: macos-arm64
-            runner: macos-14
+            # Self-hosted (maintainer Mac): org billing for hosted runners is off.
+            runner: [self-hosted, macOS, ARM64]
             artifact: agenc-marketplace-macos-arm64
 
     steps:
@@ -147,7 +154,7 @@ jobs:
   release-manifest:
     name: release manifest
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     needs: build
 
