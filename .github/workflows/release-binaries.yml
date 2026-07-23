@@ -172,6 +172,8 @@ jobs:
     needs: [plan, source-gates]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -233,11 +235,6 @@ jobs:
             sha256sum "public-artifacts/${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
           fi
 
-      - name: Attest binary provenance
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: public-artifacts/${{ matrix.artifact }}
-
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -247,12 +244,19 @@ jobs:
             public-artifacts/${{ matrix.artifact }}.sha256
           retention-days: 14
 
+  # Build legs only produce and upload verified artifacts. Provenance is
+  # centralized on the Linux release runner so every platform is gated by the
+  # same Sigstore network path before any GitHub Release is created.
   release-manifest:
     name: release manifest
     if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     needs: build
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout private source
@@ -271,6 +275,45 @@ jobs:
           path: release-artifacts/all
           merge-multiple: true
 
+      - name: Verify binary checksums and prepare provenance subjects
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t binaries < <(
+            find release-artifacts/all \
+              -maxdepth 1 \
+              -type f \
+              -name 'agenc-marketplace-*' \
+              ! -name '*.sha256' \
+              | sort
+          )
+          if [[ "${#binaries[@]}" -eq 0 ]]; then
+            echo "::error::no binary artifacts were downloaded"
+            exit 1
+          fi
+
+          subjects=release-artifacts/binary-subjects.sha256
+          : > "${subjects}"
+          for binary in "${binaries[@]}"; do
+            checksum="${binary}.sha256"
+            if [[ ! -f "${checksum}" ]]; then
+              echo "::error::missing checksum for ${binary}"
+              exit 1
+            fi
+            expected="$(awk 'NR == 1 { print $1 }' "${checksum}")"
+            actual="$(shasum -a 256 "${binary}" | awk '{ print $1 }')"
+            if [[ ! "${expected}" =~ ^[0-9a-f]{64}$ || "${actual}" != "${expected}" ]]; then
+              echo "::error::checksum mismatch for ${binary}"
+              exit 1
+            fi
+            printf '%s *%s\n' "${actual}" "$(basename "${binary}")" >> "${subjects}"
+          done
+
+      - name: Attest binary provenance
+        uses: actions/attest@v4
+        with:
+          subject-checksums: release-artifacts/binary-subjects.sha256
+
       - name: Generate release manifest
         shell: bash
         run: |
@@ -287,7 +330,7 @@ jobs:
           shasum -a 256 release-artifacts/agenc-marketplace-release-manifest.json > release-artifacts/agenc-marketplace-release-manifest.json.sha256
 
       - name: Attest manifest provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: release-artifacts/agenc-marketplace-release-manifest.json
 
