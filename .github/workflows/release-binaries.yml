@@ -247,10 +247,11 @@ jobs:
             chmod 0755 "public-artifacts/${{ matrix.artifact }}"
           fi
           if command -v shasum >/dev/null 2>&1; then
-            shasum -a 256 "public-artifacts/${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
+            hash="$(shasum -a 256 "public-artifacts/${{ matrix.artifact }}" | awk '{ print $1 }')"
           else
-            sha256sum "public-artifacts/${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
+            hash="$(sha256sum "public-artifacts/${{ matrix.artifact }}" | awk '{ print $1 }')"
           fi
+          printf '%s  %s\n' "${hash}" "${{ matrix.artifact }}" > "public-artifacts/${{ matrix.artifact }}.sha256"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -507,7 +508,12 @@ jobs:
             --workflow .github/workflows/release-binaries.yml \
             --base-url "https://github.com/tetsuo-ai/agenc-marketplace-releases/releases/download/${{ inputs.tag }}" \
             --out release-artifacts/agenc-marketplace-release-manifest.json
-          shasum -a 256 release-artifacts/agenc-marketplace-release-manifest.json > release-artifacts/agenc-marketplace-release-manifest.json.sha256
+          manifest=release-artifacts/agenc-marketplace-release-manifest.json
+          manifest_hash="$(shasum -a 256 "${manifest}" | awk '{ print $1 }')"
+          printf '%s  %s\n' \
+            "${manifest_hash}" \
+            "$(basename "${manifest}")" \
+            > "${manifest}.sha256"
 
       - name: Attest manifest provenance
         uses: actions/attest@v4
