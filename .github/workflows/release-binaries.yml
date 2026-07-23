@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       source-ref:
-        description: Private source ref to build.
+        description: Exact 40-character private source commit SHA to build.
         required: true
-        default: main
         type: string
       tag:
         description: Public release tag, e.g. v0.1.105.
@@ -99,9 +98,78 @@ jobs:
           echo "include=${include}" >> "$GITHUB_OUTPUT"
           echo "planned matrix: ${include}"
 
+  source-gates:
+    name: validate exact private source
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Require an immutable source commit
+        shell: bash
+        env:
+          SOURCE_REF: ${{ inputs.source-ref }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${SOURCE_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source-ref must be an exact 40-character lowercase commit SHA"
+            exit 1
+          fi
+
+      - name: Checkout private source
+        uses: actions/checkout@v4
+        with:
+          repository: tetsuo-ai/agenc-marketplace-agent-kit
+          ref: ${{ inputs.source-ref }}
+          token: ${{ secrets.AGENC_SOURCE_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+
+      - name: Verify source identity and release version
+        shell: bash
+        working-directory: source
+        env:
+          SOURCE_REF: ${{ inputs.source-ref }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${SOURCE_REF}"
+          node -e '
+            const fs = require("node:fs");
+            const version = JSON.parse(fs.readFileSync("packages/kit/package.json", "utf8")).version;
+            const expected = process.env.RELEASE_TAG.replace(/^v/, "");
+            if (version !== expected) {
+              throw new Error(`source package version ${version} does not match release tag ${process.env.RELEASE_TAG}`);
+            }
+          '
+
+      - name: Setup pinned Node runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Pin declared npm toolchain
+        run: npm install --global npm@11.18.0
+
+      - name: Install without lifecycle scripts
+        working-directory: source
+        run: npm ci --ignore-scripts
+
+      - name: Run complete source validation gate
+        working-directory: source
+        run: npm run validate
+
+      - name: Run production dependency and license audit policy
+        working-directory: source
+        run: npm run audit:prod
+
   build:
     name: build / ${{ matrix.label }}
-    needs: plan
+    needs: [plan, source-gates]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -120,12 +188,15 @@ jobs:
           fetch-depth: 0
           path: source
 
-      - name: Setup Node 22 LTS
+      - name: Setup Node 22.23.1
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.1
           cache: npm
           cache-dependency-path: source/package-lock.json
+
+      - name: Pin declared npm toolchain
+        run: npm install --global npm@11.18.0
 
       - name: Install without lifecycle scripts
         working-directory: source
