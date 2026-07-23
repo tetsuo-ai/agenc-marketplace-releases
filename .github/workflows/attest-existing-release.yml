@@ -46,7 +46,7 @@ jobs:
           done
 
       - name: Attest release assets
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: |
             release-assets/agenc-marketplace-*
