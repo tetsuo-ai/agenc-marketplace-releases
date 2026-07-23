@@ -32,8 +32,14 @@ on:
         required: true
         default: linux-x64,macos-arm64
         type: string
+      artifact-run-id:
+        description: Optional prior release workflow run whose already-uploaded artifacts should be recovered after their source and build evidence are verified.
+        required: false
+        default: ""
+        type: string
 
 permissions:
+  actions: read
   contents: write
   id-token: write
   attestations: write
@@ -169,6 +175,7 @@ jobs:
 
   build:
     name: build / ${{ matrix.label }}
+    if: inputs.artifact-run-id == ''
     needs: [plan, source-gates]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -259,11 +266,21 @@ jobs:
   # same Sigstore network path before any GitHub Release is created.
   release-manifest:
     name: release manifest
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' &&
+        always() &&
+        needs.source-gates.result == 'success' &&
+        (
+          needs.build.result == 'success' ||
+          (inputs.artifact-run-id != '' && needs.build.result == 'skipped')
+        )
+      }}
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
-    needs: build
+    needs: [source-gates, build]
     permissions:
+      actions: read
       contents: write
       id-token: write
       attestations: write
@@ -279,16 +296,163 @@ jobs:
           fetch-depth: 0
           path: source
 
-      - name: Download built artifacts
+      - name: Verify recovered run source and build evidence
+        if: inputs.artifact-run-id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ inputs.artifact-run-id }}
+          SOURCE_REF: ${{ inputs.source-ref }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          PLATFORMS: ${{ inputs.platforms }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${ARTIFACT_RUN_ID}" =~ ^[0-9]+$ ]] || [[ "${ARTIFACT_RUN_ID}" == "${GITHUB_RUN_ID}" ]]; then
+            echo "::error::artifact-run-id must identify a completed prior workflow run"
+            exit 1
+          fi
+
+          run_json="${RUNNER_TEMP}/artifact-run.json"
+          jobs_json="${RUNNER_TEMP}/artifact-run-jobs.json"
+          artifacts_json="${RUNNER_TEMP}/artifact-run-artifacts.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACT_RUN_ID}" > "${run_json}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACT_RUN_ID}/jobs?per_page=100" > "${jobs_json}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACT_RUN_ID}/artifacts?per_page=100" > "${artifacts_json}"
+
+          jq -e '
+            .event == "workflow_dispatch" and
+            .path == ".github/workflows/release-binaries.yml" and
+            .status == "completed"
+          ' "${run_json}" >/dev/null || {
+            echo "::error::artifact run is not a completed release-binaries workflow dispatch"
+            exit 1
+          }
+
+          source_job_id="$(
+            jq -r '
+              [
+                .jobs[]
+                | select(
+                    .name == "validate exact private source" and
+                    .conclusion == "success"
+                  )
+                | .id
+              ]
+              | if length == 1 then .[0] else empty end
+            ' "${jobs_json}"
+          )"
+          if [[ -z "${source_job_id}" ]]; then
+            echo "::error::artifact run lacks one successful exact-source validation job"
+            exit 1
+          fi
+
+          source_log="${RUNNER_TEMP}/artifact-run-source-gate.log"
+          gh run view "${ARTIFACT_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --job "${source_job_id}" \
+            --log > "${source_log}"
+          grep -F "SOURCE_REF: ${SOURCE_REF}" "${source_log}" >/dev/null || {
+            echo "::error::artifact run source ref does not match this recovery request"
+            exit 1
+          }
+          grep -F "RELEASE_TAG: ${RELEASE_TAG}" "${source_log}" >/dev/null || {
+            echo "::error::artifact run release tag does not match this recovery request"
+            exit 1
+          }
+
+          IFS=',' read -ra requested_platforms <<< "${PLATFORMS}"
+          for raw_platform in "${requested_platforms[@]}"; do
+            platform="${raw_platform//[[:space:]]/}"
+            case "${platform}" in
+              linux-x64)
+                artifact="agenc-marketplace-linux-x64"
+                ;;
+              macos-arm64)
+                artifact="agenc-marketplace-macos-arm64"
+                ;;
+              windows-x64)
+                artifact="agenc-marketplace-windows-x64.exe"
+                ;;
+              *)
+                echo "::error::unsupported recovery platform: ${platform}"
+                exit 1
+                ;;
+            esac
+
+            job_name="build / ${platform}"
+            for required_step in \
+              "Checkout private source" \
+              "Build SEA binary" \
+              "Smoke test binary" \
+              "Prepare artifact" \
+              "Upload workflow artifact"; do
+              jq -e \
+                --arg job "${job_name}" \
+                --arg step "${required_step}" \
+                'any(.jobs[];
+                  .name == $job and
+                  any(.steps[]; .name == $step and .conclusion == "success")
+                )' \
+                "${jobs_json}" >/dev/null || {
+                  echo "::error::artifact run lacks successful '${required_step}' evidence for ${platform}"
+                  exit 1
+                }
+            done
+
+            jq -e \
+              --arg artifact "${artifact}" \
+              'any(.artifacts[]; .name == $artifact and .expired == false)' \
+              "${artifacts_json}" >/dev/null || {
+                echo "::error::artifact run lacks a live ${artifact} workflow artifact"
+                exit 1
+              }
+          done
+
+      - name: Download newly built artifacts
+        if: inputs.artifact-run-id == ''
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts/all
           merge-multiple: true
 
+      - name: Download recovered artifacts
+        if: inputs.artifact-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.artifact-run-id }}
+          path: release-artifacts/all
+          merge-multiple: true
+
       - name: Verify binary checksums and prepare provenance subjects
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
         shell: bash
         run: |
           set -euo pipefail
+          expected_names=()
+          IFS=',' read -ra requested_platforms <<< "${PLATFORMS}"
+          for raw_platform in "${requested_platforms[@]}"; do
+            platform="${raw_platform//[[:space:]]/}"
+            case "${platform}" in
+              linux-x64)
+                expected_names+=("agenc-marketplace-linux-x64")
+                ;;
+              macos-arm64)
+                expected_names+=("agenc-marketplace-macos-arm64")
+                ;;
+              windows-x64)
+                expected_names+=("agenc-marketplace-windows-x64.exe")
+                ;;
+              *)
+                echo "::error::unsupported release platform: ${platform}"
+                exit 1
+                ;;
+            esac
+          done
+          mapfile -t expected_names < <(printf '%s\n' "${expected_names[@]}" | sort -u)
+
           mapfile -t binaries < <(
             find release-artifacts/all \
               -maxdepth 1 \
@@ -297,10 +461,16 @@ jobs:
               ! -name '*.sha256' \
               | sort
           )
-          if [[ "${#binaries[@]}" -eq 0 ]]; then
-            echo "::error::no binary artifacts were downloaded"
+          if [[ "${#binaries[@]}" -ne "${#expected_names[@]}" ]]; then
+            echo "::error::downloaded binary count does not match requested platforms"
             exit 1
           fi
+          for index in "${!binaries[@]}"; do
+            if [[ "$(basename "${binaries[index]}")" != "${expected_names[index]}" ]]; then
+              echo "::error::downloaded binaries do not exactly match requested platforms"
+              exit 1
+            fi
+          done
 
           subjects=release-artifacts/binary-subjects.sha256
           : > "${subjects}"
