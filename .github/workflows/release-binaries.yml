@@ -28,9 +28,9 @@ on:
         default: true
         type: boolean
       platforms:
-        description: Comma-separated matrix labels to build. Add windows-x64 only when a Windows runner exists.
+        description: Comma-separated matrix labels to build. linux-x64 and windows-x64 run on GitHub-hosted runners, macos-arm64 on the self-hosted Mac.
         required: true
-        default: linux-x64,macos-arm64
+        default: linux-x64,windows-x64,macos-arm64
         type: string
       artifact-run-id:
         description: Optional prior release workflow run whose already-uploaded artifacts should be recovered after their source and build evidence are verified.
@@ -51,7 +51,7 @@ concurrency:
 jobs:
   validate:
     name: validate release repository metadata
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -70,13 +70,14 @@ jobs:
 
   # The matrix context is not available in job-level `if`, so the platform
   # filter lives in this tiny plan job: it turns the `platforms` input into
-  # the matrix include list. Legs whose runners do not exist (e.g.
-  # windows-x64 while hosted runners are billing-blocked) are simply never
-  # scheduled, so `needs: build` stays green for the manifest job.
+  # the matrix include list. A leg left out of `platforms` is never
+  # scheduled, and the manifest generator omits its artifact. The default
+  # builds all three platforms; leaving windows-x64 out of the old default is
+  # why v0.1.123 to v0.1.130 shipped without a Windows binary.
   plan:
     name: plan build matrix
     if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       include: ${{ steps.plan.outputs.include }}
@@ -90,7 +91,7 @@ jobs:
           include="$(python3 - <<'PYEOF'
           import json, os
           legs = [
-              {"label": "linux-x64", "runner": ["self-hosted", "Linux", "X64"],
+              {"label": "linux-x64", "runner": "ubuntu-latest",
                "artifact": "agenc-marketplace-linux-x64"},
               {"label": "windows-x64", "runner": "windows-latest",
                "artifact": "agenc-marketplace-windows-x64.exe"},
@@ -107,7 +108,7 @@ jobs:
   source-gates:
     name: validate exact private source
     if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: read
@@ -277,7 +278,7 @@ jobs:
           (inputs.artifact-run-id != '' && needs.build.result == 'skipped')
         )
       }}
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [source-gates, build]
     permissions:
